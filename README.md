@@ -55,3 +55,6 @@ lenta-price-recognition/
 ├── docker-compose.yml              # локальный запуск через Docker Compose
 ├── requirements.txt                # Python-зависимости
 └── README.md                       # описание проекта и инструкция по запуску
+
+
+python -m pip install requirements.txt
