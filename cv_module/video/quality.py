@@ -11,6 +11,7 @@ class FrameQuality:
     contrast: float
     glare_ratio: float
     dark_ratio: float
+    price_tag_ratio: float
     score: float
 
 
@@ -54,6 +55,7 @@ def calculate_frame_quality(frame: np.ndarray) -> FrameQuality:
 
     glare_ratio = float(np.mean(gray > 245))
     dark_ratio = float(np.mean(gray < 20))
+    price_tag_ratio = calculate_price_tag_color_ratio(frame)
 
     sharpness_score = _normalize(sharpness_raw, 30.0, 500.0)
 
@@ -73,6 +75,7 @@ def calculate_frame_quality(frame: np.ndarray) -> FrameQuality:
     )
 
     score = score * (1.0 - 0.5 * dark_penalty)
+    score = score + 0.18 * min(price_tag_ratio / 0.035, 1.0)
     score = float(np.clip(score, 0.0, 1.0))
 
     return FrameQuality(
@@ -81,5 +84,38 @@ def calculate_frame_quality(frame: np.ndarray) -> FrameQuality:
         contrast=contrast_raw,
         glare_ratio=glare_ratio,
         dark_ratio=dark_ratio,
+        price_tag_ratio=price_tag_ratio,
         score=score,
     )
+
+
+def calculate_price_tag_color_ratio(frame: np.ndarray) -> float:
+    hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+
+    red_mask_1 = cv2.inRange(
+        hsv,
+        np.array([0, 25, 75]),
+        np.array([13, 255, 255]),
+    )
+    red_mask_2 = cv2.inRange(
+        hsv,
+        np.array([165, 25, 75]),
+        np.array([180, 255, 255]),
+    )
+    red_mask = cv2.bitwise_or(red_mask_1, red_mask_2)
+
+    yellow_mask = cv2.inRange(
+        hsv,
+        np.array([15, 45, 85]),
+        np.array([42, 255, 255]),
+    )
+
+    color_mask = cv2.bitwise_or(red_mask, yellow_mask)
+
+    color_mask = cv2.morphologyEx(
+        color_mask,
+        cv2.MORPH_OPEN,
+        cv2.getStructuringElement(cv2.MORPH_RECT, (5, 3)),
+    )
+
+    return float(np.mean(color_mask > 0))

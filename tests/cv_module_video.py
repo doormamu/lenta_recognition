@@ -27,6 +27,7 @@ def save_report(sampled_frames, output_dir: Path) -> None:
                 "contrast",
                 "glare_ratio",
                 "dark_ratio",
+                "price_tag_ratio",
             ]
         )
 
@@ -42,6 +43,7 @@ def save_report(sampled_frames, output_dir: Path) -> None:
                     round(item.quality.contrast, 2),
                     round(item.quality.glare_ratio, 4),
                     round(item.quality.dark_ratio, 4),
+                    round(item.quality.price_tag_ratio, 4),
                 ]
             )
 

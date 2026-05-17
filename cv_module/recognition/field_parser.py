@@ -167,18 +167,30 @@ class PriceTagFieldParser:
         if barcode_match:
             fields.set_value("barcode", barcode_match.group(0), source="ocr_text")
 
-        discount_match = re.search(r"[-−]\s?\d{1,2}\s?%", compact_text)
+        discount_match = re.search(r"[-−]?\s?\d{1,2}\s?%", compact_text)
 
         if discount_match:
-            fields.set_value("discount_amount", discount_match.group(0), source="ocr_text")
+            discount = discount_match.group(0).replace(" ", "")
 
-        price_matches = re.findall(r"\b\d{1,5}[,.]\d{2}\b", compact_text)
+            if not discount.startswith(("-", "−")):
+                discount = f"-{discount}"
+
+            fields.set_value("discount_amount", discount, source="ocr_text")
+
+        price_matches = _extract_prices(compact_text)
 
         if price_matches:
-            fields.set_value("price_default", price_matches[0], source="ocr_text")
+            if len(price_matches) == 1:
+                fields.set_value("price_card", price_matches[0], source="ocr_text")
+            else:
+                fields.set_value("price_default", price_matches[0], source="ocr_text")
+                fields.set_value("price_card", price_matches[-1], source="ocr_text")
 
-        if len(price_matches) >= 2:
-            fields.set_value("price_card", price_matches[1], source="ocr_text")
+        if fields.values.get("product_name") == UNKNOWN_VALUE:
+            product_name = _extract_product_hint(text)
+
+            if product_name:
+                fields.set_value("product_name", product_name, source="ocr_text")
 
     def _derive_missing_fields(
         self,
@@ -245,3 +257,112 @@ def _extract_key_values(payload: str) -> dict[str, str]:
 
 def _normalize_key(key: str) -> str:
     return re.sub(r"[^a-z0-9_]", "", key.strip().lower())
+
+
+def _extract_product_hint(text: str) -> str:
+    cleaned_lines: list[str] = []
+    product_tokens = [
+        "вино",
+        "напиток",
+        "продукт",
+        "мед",
+        "молоко",
+        "сыр",
+        "йогурт",
+        "кефир",
+        "сок",
+        "чай",
+        "кофе",
+        "пиво",
+    ]
+
+    for raw_line in text.splitlines():
+        line = " ".join(raw_line.split()).strip(" |[]{}()")
+
+        if len(line) < 4:
+            continue
+
+        if not re.search(r"[А-Яа-яЁё]", line):
+            continue
+
+        if re.search(r"\d{2,5}", line):
+            continue
+
+        if len(re.findall(r"[А-Яа-яЁё]", line)) < 3:
+            continue
+
+        lowered = line.lower()
+
+        if any(token in lowered for token in ["руб", "коп", "цена", "скид", "штрих"]):
+            continue
+
+        if not any(token in lowered for token in product_tokens) and not cleaned_lines:
+            continue
+
+        line = re.sub(r"[^0-9A-Za-zА-Яа-яЁё .,%/-]+", " ", line)
+        line = " ".join(line.split())
+
+        if line:
+            cleaned_lines.append(line)
+
+        if len(cleaned_lines) >= 2:
+            break
+
+    if not cleaned_lines:
+        return ""
+
+    return " ".join(cleaned_lines[:3])[:240]
+
+
+def _extract_prices(text: str) -> list[str]:
+    result: list[str] = []
+
+    for match in re.findall(r"\b\d{1,5}[,.]\d{2}\b", text):
+        result.append(match)
+
+    for whole, cents in re.findall(r"\b(\d{2,5})\s{1,3}(\d{2})\b", text):
+        result.append(f"{whole}.{cents}")
+
+    for match in re.finditer(r"\b\d{3,5}\b", text):
+        whole = match.group(0)
+        previous_char = text[match.start() - 1] if match.start() > 0 else ""
+        next_char = text[match.end()] if match.end() < len(text) else ""
+
+        if previous_char in {".", ","} or next_char in {".", ","}:
+            continue
+
+        if any(whole in price for price in result):
+            continue
+
+        if len(whole) == 5:
+            prefix = text[max(0, match.start() - 2):match.start()]
+
+            if "#" in prefix or whole[0] not in {"1", "2"}:
+                continue
+
+            trimmed = whole[-4:]
+
+            if 100 <= int(trimmed) <= 9999:
+                result.append(f"{trimmed}.99")
+
+            continue
+
+        result.append(f"{whole}.99")
+
+    deduplicated: list[str] = []
+
+    for price in result:
+        normalized = price.replace(",", ".")
+
+        try:
+            numeric_price = float(normalized)
+        except ValueError:
+            continue
+
+        if numeric_price < 10.0 or numeric_price > 9999.99:
+            continue
+
+        if normalized not in deduplicated:
+            deduplicated.append(normalized)
+
+    return deduplicated[:4]
