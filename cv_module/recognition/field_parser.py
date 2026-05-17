@@ -162,29 +162,52 @@ class PriceTagFieldParser:
     ) -> None:
         compact_text = " ".join(text.split())
 
-        barcode_match = re.search(r"\b\d[\d ]{6,18}\d\b", compact_text)
+        barcode_match = _extract_barcode(compact_text)
 
         if barcode_match:
-            fields.set_value("barcode", barcode_match.group(0), source="ocr_text")
+            fields.set_value("barcode", barcode_match, source="ocr_text")
 
-        discount_match = re.search(r"[-−]?\s?\d{1,2}\s?%", compact_text)
+        discount_match = re.search(r"[-−]?\s?[0-9OoОо]{1,2}\s?[%оo]", compact_text)
 
         if discount_match:
             discount = discount_match.group(0).replace(" ", "")
+            discount = discount.replace("−", "-")
+            discount = (
+                discount
+                .replace("O", "0")
+                .replace("o", "0")
+                .replace("О", "0")
+                .replace("о", "0")
+            )
+            discount = discount.rstrip("оo") + "%"
 
             if not discount.startswith(("-", "−")):
                 discount = f"-{discount}"
 
+            discount = re.sub(r"^-0+(\d)", r"-\1", discount)
+
             fields.set_value("discount_amount", discount, source="ocr_text")
+
+        print_datetime = _extract_print_datetime(compact_text)
+
+        if print_datetime:
+            fields.set_value("print_datetime", print_datetime, source="ocr_text")
+
+        code = _extract_price_tag_code(compact_text)
+
+        if code:
+            fields.set_value("code", code, source="ocr_text")
 
         price_matches = _extract_prices(compact_text)
 
         if price_matches:
-            if len(price_matches) == 1:
-                fields.set_value("price_card", price_matches[0], source="ocr_text")
-            else:
-                fields.set_value("price_default", price_matches[0], source="ocr_text")
-                fields.set_value("price_card", price_matches[-1], source="ocr_text")
+            default_price, card_price = _choose_default_and_card_prices(price_matches)
+
+            if default_price:
+                fields.set_value("price_default", default_price, source="ocr_text")
+
+            if card_price:
+                fields.set_value("price_card", card_price, source="ocr_text")
 
         if fields.values.get("product_name") == UNKNOWN_VALUE:
             product_name = _extract_product_hint(text)
@@ -276,6 +299,8 @@ def _extract_product_hint(text: str) -> str:
         "пиво",
     ]
 
+    candidate_lines: list[tuple[int, str]] = []
+
     for raw_line in text.splitlines():
         line = " ".join(raw_line.split()).strip(" |[]{}()")
 
@@ -293,25 +318,67 @@ def _extract_product_hint(text: str) -> str:
 
         lowered = line.lower()
 
-        if any(token in lowered for token in ["руб", "коп", "цена", "скид", "штрих"]):
-            continue
-
-        if not any(token in lowered for token in product_tokens) and not cleaned_lines:
+        if any(token in lowered for token in ["руб", "коп", "цена", "скид", "штрих", "qr", "код"]):
             continue
 
         line = re.sub(r"[^0-9A-Za-zА-Яа-яЁё .,%/-]+", " ", line)
         line = " ".join(line.split())
 
-        if line:
-            cleaned_lines.append(line)
+        if not line:
+            continue
 
-        if len(cleaned_lines) >= 2:
+        score = len(re.findall(r"[А-Яа-яЁёA-Za-z]", line))
+
+        if any(token in lowered for token in product_tokens):
+            score += 30
+
+        if re.search(r"\b\d{1,2}[,.]\s?\d{1,2}\b", line):
+            score += 5
+
+        candidate_lines.append((score, line))
+
+        if len(candidate_lines) >= 5:
             break
 
-    if not cleaned_lines:
+    if not candidate_lines:
         return ""
 
+    candidate_lines.sort(key=lambda item: item[0], reverse=True)
+    cleaned_lines = [line for _, line in candidate_lines[:2]]
+
     return " ".join(cleaned_lines[:3])[:240]
+
+
+def _extract_barcode(text: str) -> str:
+    for match in re.finditer(r"\b\d[\d ]{6,22}\d\b", text):
+        compact = re.sub(r"\D", "", match.group(0))
+
+        if len(compact) in {8, 12, 13, 14}:
+            return compact
+
+    return ""
+
+
+def _extract_print_datetime(text: str) -> str:
+    match = re.search(
+        r"\b(\d{2})[.](\d{2})[.](\d{4})\s+(\d{1,2})[:.](\d{2})\b",
+        text,
+    )
+
+    if not match:
+        return ""
+
+    day, month, year, hour, minute = match.groups()
+    return f"{day}.{month}.{year} {int(hour)}:{minute}"
+
+
+def _extract_price_tag_code(text: str) -> str:
+    match = re.search(r"\b\d{2,3}[_\s-]\d{3,6}(?:\s*[-–]\s*\d{2,3}[_\s-]?\d{3,6})?\b", text)
+
+    if not match:
+        return ""
+
+    return " ".join(match.group(0).replace("_", " ").split())
 
 
 def _extract_prices(text: str) -> list[str]:
@@ -340,7 +407,10 @@ def _extract_prices(text: str) -> list[str]:
             if "#" in prefix or whole[0] not in {"1", "2"}:
                 continue
 
-            trimmed = whole[-4:]
+            if whole.startswith("10") or whole.startswith("20"):
+                trimmed = whole[0] + whole[-3:]
+            else:
+                trimmed = whole[-4:]
 
             if 100 <= int(trimmed) <= 9999:
                 result.append(f"{trimmed}.99")
@@ -366,3 +436,46 @@ def _extract_prices(text: str) -> list[str]:
             deduplicated.append(normalized)
 
     return deduplicated[:4]
+
+
+def _choose_default_and_card_prices(prices: list[str]) -> tuple[str, str]:
+    numeric_prices = sorted(
+        {
+            float(price.replace(",", "."))
+            for price in prices
+            if _is_float(price)
+        },
+        reverse=True,
+    )
+
+    numeric_prices = [
+        price
+        for price in numeric_prices
+        if price >= 50.0
+    ]
+
+    if not numeric_prices:
+        return "", ""
+
+    if len(numeric_prices) == 1:
+        return "", _format_price(numeric_prices[0])
+
+    highest = numeric_prices[0]
+    second = numeric_prices[1]
+
+    if highest / max(second, 1.0) >= 1.20:
+        return _format_price(highest), _format_price(second)
+
+    return "", _format_price(highest)
+
+
+def _is_float(value: str) -> bool:
+    try:
+        float(value.replace(",", "."))
+        return True
+    except ValueError:
+        return False
+
+
+def _format_price(value: float) -> str:
+    return f"{value:.2f}"

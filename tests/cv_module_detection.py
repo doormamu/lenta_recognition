@@ -377,8 +377,7 @@ python tests/cv_module_detection.py \
   --window-sec 0.5 \
   --max-frames 80 \
   --min-quality 0.15 \
-  --max-candidates 20 \
-  --min-candidate-score 0.50 \
-  --save-crops \
-  --save-code-crops
+  --max-candidates 80 \
+  --min-candidate-score 0.30 \
+  --save-crops
 '''
