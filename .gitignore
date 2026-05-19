@@ -20,6 +20,12 @@ data/labeling
 *.mov
 *.mkv
 
+!data/output/final/
+!data/output/final/**
+
+!data/input/web/
+!data/input/web/**
+
 models/
 *.pt
 *.pth
