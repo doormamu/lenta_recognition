@@ -8,3 +8,6 @@ zxing-cpp
 ultralytics
 paddleocr
 paddlepaddle
+fastapi
+uvicorn
+python-multipart

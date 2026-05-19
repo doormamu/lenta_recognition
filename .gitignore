@@ -1,36 +1,64 @@
+# Python cache
 __pycache__/
 *.py[cod]
 
+# Virtual environments
 .venv/
 venv/
 env/
 
+# IDE
 .idea/
 .vscode/
 
+# System files
 .DS_Store
 
-data/input/
-data/output/
-data/tmp/
-data/datasets/
-data/labeling
-*.mp4
-*.avi
-*.mov
-*.mkv
-
-!data/output/final/
-!data/output/final/**
-
-!data/input/web/
-!data/input/web/**
-
-models/
-*.pt
-*.pth
-*.onnx
-*.rknn
-
+# Environment and logs
 .env
 *.log
+
+# Data input: не храним реальные входные данные
+data/input/*
+!data/input/web/
+data/input/web/*
+!data/input/web/.gitkeep
+!data/input/references/
+data/input/references/*
+!data/input/references/.gitkeep
+
+# Generated output
+data/output/*
+!data/output/final/
+data/output/final/*
+!data/output/final/.gitkeep
+
+# Runtime/generated/intermediate data
+data/tmp/
+data/datasets/
+data/labeling/
+data/runtime/
+data/web/
+runs/
+
+# Videos
+*.mp4
+*.mov
+*.avi
+*.mkv
+
+# Models
+models/**/*.pt
+models/**/*.pth
+models/**/*.onnx
+models/**/*.rknn
+models/**/*.engine
+
+!models/
+!models/**/
+!models/**/.gitkeep
+
+# Tesseract language data
+tessdata/
+**/tessdata/
+*.traineddata
