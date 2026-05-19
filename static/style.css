@@ -1,0 +1,73 @@
+body {
+    font-family: Arial, sans-serif;
+    background: #f4f4f4;
+    margin: 0;
+    padding: 20px;
+}
+.container {
+    max-width: 800px;
+    margin: auto;
+    background: white;
+    padding: 30px;
+    border-radius: 10px;
+    box-shadow: 0 0 10px rgba(0,0,0,0.1);
+}
+h1 {
+    color: #333;
+    text-align: center;
+}
+form {
+    text-align: center;
+    margin: 20px 0;
+}
+input[type="file"] {
+    margin: 10px;
+}
+button, .btn {
+    background: #2196F3;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 16px;
+    text-decoration: none;
+    display: inline-block;
+    margin: 10px 5px;
+}
+button:hover, .btn:hover {
+    background: #0b7dda;
+}
+.progress-container {
+    text-align: center;
+    margin: 30px 0;
+}
+.progress-bar {
+    background-color: #e0e0e0;
+    border-radius: 10px;
+    overflow: hidden;
+    width: 100%;
+}
+.progress {
+    background-color: #4caf50;
+    height: 30px;
+    width: 0%;
+    transition: width 0.3s;
+}
+.download-buttons {
+    text-align: center;
+    margin: 30px 0;
+}
+.error {
+    color: #f44336;
+    margin-top: 20px;
+    text-align: center;
+}
+.info {
+    color: #2196F3;
+    margin-top: 20px;
+    text-align: center;
+}
+.hidden {
+    display: none;
+}

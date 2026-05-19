@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Детектор ценников – загрузка</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>Загрузите видео для поиска ценников</h1>
+        <form id="uploadForm" enctype="multipart/form-data">
+            <input type="file" name="video" accept="video/*" required>
+            <button type="submit">Загрузить</button>
+        </form>
+        <div id="error" class="error hidden"></div>
+    </div>
+    <script>
+        const form = document.getElementById('uploadForm');
+        const errorDiv = document.getElementById('error');
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const formData = new FormData(form);
+            try {
+                const resp = await fetch('/upload', { method: 'POST', body: formData });
+                const data = await resp.json();
+                if (resp.ok && data.job_id) {
+                    window.location.href = `/processing/${data.job_id}`;
+                } else {
+                    errorDiv.textContent = data.error || 'Ошибка загрузки';
+                    errorDiv.classList.remove('hidden');
+                }
+            } catch (err) {
+                errorDiv.textContent = 'Ошибка сети: ' + err.message;
+                errorDiv.classList.remove('hidden');
+            }
+        });
+    </script>
+</body>
+</html>

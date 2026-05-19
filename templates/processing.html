@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Обработка видео</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>Обработка видео</h1>
+        <div class="progress-container">
+            <div class="progress-bar">
+                <div class="progress" id="progressFill" style="width:0%"></div>
+            </div>
+            <p id="progressPercent">0%</p>
+            <p id="statusMessage">Идёт подготовка...</p>
+        </div>
+        <div id="errorMessage" class="error hidden"></div>
+    </div>
+    <script>
+        const jobId = window.location.pathname.split('/').pop();
+        const progressFill = document.getElementById('progressFill');
+        const progressPercent = document.getElementById('progressPercent');
+        const statusMessage = document.getElementById('statusMessage');
+        const errorDiv = document.getElementById('errorMessage');
+        let pollInterval = null;
+
+        async function checkStatus() {
+            try {
+                const resp = await fetch(`/status/${jobId}`);
+                const data = await resp.json();
+                if (!resp.ok) throw new Error(data.error || 'Ошибка получения статуса');
+
+                if (data.status === 'processing') {
+                    const p = data.progress || 0;
+                    progressFill.style.width = p + '%';
+                    progressPercent.textContent = p + '%';
+                    statusMessage.textContent = `Обработка... ${p}%`;
+                } 
+                else if (data.status === 'done') {
+                    clearInterval(pollInterval);
+                    statusMessage.textContent = 'Обработка завершена! Перенаправление...';
+                    setTimeout(() => {
+                        window.location.href = `/result/${jobId}`;
+                    }, 1000);
+                }
+                else if (data.status === 'error') {
+                    clearInterval(pollInterval);
+                    errorDiv.textContent = data.error || 'Неизвестная ошибка';
+                    errorDiv.classList.remove('hidden');
+                    statusMessage.textContent = 'Ошибка обработки';
+                }
+            } catch (err) {
+                clearInterval(pollInterval);
+                errorDiv.textContent = 'Ошибка соединения: ' + err.message;
+                errorDiv.classList.remove('hidden');
+            }
+        }
+
+        pollInterval = setInterval(checkStatus, 1500);
+        checkStatus();
+    </script>
+</body>
+</html>

@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Результаты детекции ценников</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>Готово!</h1>
+        <p>Видео обработано. Скачайте результаты:</p>
+        <div class="download-buttons">
+            <button id="downloadZipBtn" class="btn">Скачать ZIP (ценники + CSV)</button>
+            <button id="downloadCsvBtn" class="btn">Скачать только CSV</button>
+        </div>
+        <div id="message" class="info"></div>
+        <a href="/" class="btn">Новое видео</a>
+    </div>
+    <script>
+        const jobId = window.location.pathname.split('/').pop();
+        const zipBtn = document.getElementById('downloadZipBtn');
+        const csvBtn = document.getElementById('downloadCsvBtn');
+        const msgDiv = document.getElementById('message');
+
+        function triggerDownload(url, filename) {
+            fetch(url)
+                .then(response => {
+                    if (!response.ok) throw new Error('Файл не найден');
+                    return response.blob();
+                })
+                .then(blob => {
+                    const link = document.createElement('a');
+                    const objectUrl = URL.createObjectURL(blob);
+                    link.href = objectUrl;
+                    link.download = filename;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    URL.revokeObjectURL(objectUrl);
+                    msgDiv.textContent = `Скачивание ${filename} начато`;
+                    msgDiv.className = 'info';
+                })
+                .catch(err => {
+                    msgDiv.textContent = 'Ошибка: ' + err.message;
+                    msgDiv.className = 'error';
+                });
+        }
+
+        zipBtn.addEventListener('click', () => {
+            triggerDownload(`/download_zip/${jobId}`, `${jobId}_results.zip`);
+        });
+
+        csvBtn.addEventListener('click', () => {
+            triggerDownload(`/download_csv/${jobId}`, `${jobId}_results.csv`);
+        });
+    </script>
+</body>
+</html>
