@@ -77,12 +77,6 @@ def main() -> None:
     parser.add_argument("--max-frame-gap", type=int, default=36)
     parser.add_argument("--min-match-score", type=float, default=0.27)
     parser.add_argument("--max-detections-per-frame", type=int, default=40)
-    parser.add_argument("--merge-track-gap", type=int, default=72)
-    parser.add_argument("--merge-match-score", type=float, default=0.34)
-    parser.add_argument("--frame-width", type=int, default=3840)
-    parser.add_argument("--frame-height", type=int, default=2160)
-    parser.add_argument("--edge-margin", type=int, default=180)
-    parser.add_argument("--edge-max-frame-gap", type=int, default=72)
     args = parser.parse_args()
 
     detection_report_path = Path(args.detection_report)
@@ -97,12 +91,6 @@ def main() -> None:
             max_frame_gap=args.max_frame_gap,
             min_match_score=args.min_match_score,
             max_detections_per_frame=args.max_detections_per_frame,
-            merge_track_gap=args.merge_track_gap,
-            merge_match_score=args.merge_match_score,
-            frame_width=args.frame_width,
-            frame_height=args.frame_height,
-            edge_margin=args.edge_margin,
-            edge_max_frame_gap=args.edge_max_frame_gap,
         )
     )
     tracks = tracker.track(detections)
@@ -262,3 +250,21 @@ def _save_track_detection_rows(
 
 if __name__ == "__main__":
     main()
+
+
+'''
+/Library/Frameworks/Python.framework/Versions/3.13/bin/python3 tests/cv_module_tracking.py \
+  --detection-report data/output/detection_debug/detection_report.csv \
+  --video data/input/labeled/25_2-10.mp4 \
+  --output data/output/tracking_debug/tracks_25_2_10.csv \
+  --save-best-crops \
+  --min-score 0.50 \
+  --min-detections 3 \
+  --max-frame-gap 44 \
+  --min-match-score 0.27 \
+  --max-detections-per-frame 35 \
+  --merge-track-gap 88 \
+  --merge-match-score 0.28 \
+  --edge-margin 220 \
+  --edge-max-frame-gap 96
+'''

@@ -1,97 +1,78 @@
+from __future__ import annotations
+
 import argparse
-import csv
 import sys
 from pathlib import Path
+
+import cv2
+import numpy as np
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.append(str(PROJECT_ROOT))
 
-from cv_module.video.frame_sampler import sample_video_frames, save_sampled_frames
-from cv_module.video.reader import get_video_metadata
+from cv_module.video.preprocessing import build_preprocessor_for_video  # noqa: E402
 
 
-def save_report(sampled_frames, output_dir: Path) -> None:
-    report_path = output_dir / "frame_sampling_report.csv"
+def make_before_after_collage(raw, processed):
+    raw_small = resize_to_height(raw, 480)
+    processed_small = resize_to_height(processed, 480)
 
-    with report_path.open("w", encoding="utf-8", newline="") as file:
-        writer = csv.writer(file)
+    h = max(raw_small.shape[0], processed_small.shape[0])
 
-        writer.writerow(
-            [
-                "frame_index",
-                "timestamp_ms",
-                "timestamp_sec",
-                "quality_score",
-                "sharpness",
-                "brightness",
-                "contrast",
-                "glare_ratio",
-                "dark_ratio",
-                "price_tag_ratio",
-            ]
-        )
+    raw_small = pad_to_height(raw_small, h)
+    processed_small = pad_to_height(processed_small, h)
 
-        for item in sampled_frames:
-            writer.writerow(
-                [
-                    item.frame_index,
-                    round(item.timestamp_ms, 2),
-                    round(item.timestamp_ms / 1000.0, 2),
-                    round(item.quality.score, 4),
-                    round(item.quality.sharpness, 2),
-                    round(item.quality.brightness, 2),
-                    round(item.quality.contrast, 2),
-                    round(item.quality.glare_ratio, 4),
-                    round(item.quality.dark_ratio, 4),
-                    round(item.quality.price_tag_ratio, 4),
-                ]
-            )
-
-
-def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Проверка выбора кадров из видео"
+    cv2.putText(
+        raw_small,
+        "RAW",
+        (20, 40),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        1.2,
+        (0, 255, 0),
+        3,
     )
 
-    parser.add_argument(
-        "--video",
-        required=True,
-        help="Путь до видеофайла",
+    cv2.putText(
+        processed_small,
+        "UNDISTORT + ROTATE",
+        (20, 40),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        1.2,
+        (0, 255, 0),
+        3,
     )
 
-    parser.add_argument(
-        "--output",
-        default="data/output/frame_sampling",
-        help="Папка для сохранения выбранных кадров",
-    )
+    return np.hstack([raw_small, processed_small])
 
-    parser.add_argument(
-        "--target-fps",
-        type=float,
-        default=2.0,
-        help="Сколько кадров в секунду предварительно смотреть",
-    )
 
-    parser.add_argument(
-        "--window-sec",
-        type=float,
-        default=1.0,
-        help="Размер временного окна, внутри которого выбирается лучший кадр",
-    )
+def resize_to_height(image, height):
+    h, w = image.shape[:2]
 
-    parser.add_argument(
-        "--max-frames",
-        type=int,
-        default=100,
-        help="Максимальное число выбранных кадров",
-    )
+    scale = height / h
+    new_w = int(w * scale)
 
-    parser.add_argument(
-        "--min-quality",
-        type=float,
-        default=0.25,
-        help="Минимальная оценка качества кадра от 0 до 1",
-    )
+    return cv2.resize(image, (new_w, height), interpolation=cv2.INTER_AREA)
+
+
+def pad_to_height(image, height):
+    h, w = image.shape[:2]
+
+    if h == height:
+        return image
+
+    pad = np.zeros((height - h, w, 3), dtype=image.dtype)
+
+    return np.vstack([image, pad])
+
+
+def main():
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument("--video", required=True)
+    parser.add_argument("--output", default="data/output/video_preprocessing_debug")
+    parser.add_argument("--frames", type=int, default=12)
+    parser.add_argument("--orientation", default="auto")
+    parser.add_argument("--undistort", action="store_true")
 
     args = parser.parse_args()
 
@@ -99,49 +80,60 @@ def main() -> None:
     output_dir = Path(args.output)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    metadata = get_video_metadata(video_path)
-
-    print("Видео:")
-    print(f"  path: {metadata.path}")
-    print(f"  fps: {metadata.fps:.2f}")
-    print(f"  frame_count: {metadata.frame_count}")
-    print(f"  size: {metadata.width}x{metadata.height}")
-    print(f"  duration_sec: {metadata.duration_sec:.2f}")
-
-    sampled_frames = sample_video_frames(
+    preprocessor = build_preprocessor_for_video(
         video_path=video_path,
-        target_fps=args.target_fps,
-        window_sec=args.window_sec,
-        max_frames=args.max_frames,
-        min_quality_score=args.min_quality,
+        enable_undistort=args.undistort,
+        orientation=args.orientation,
     )
 
-    save_sampled_frames(
-        sampled_frames=sampled_frames,
-        output_dir=output_dir,
-        prefix=video_path.stem,
-    )
+    print("rotation_mode:", preprocessor.rotation_mode)
+    print("enable_undistort:", preprocessor.enable_undistort)
 
-    save_report(sampled_frames, output_dir)
+    cap = cv2.VideoCapture(str(video_path))
 
-    print()
-    print(f"Выбрано кадров: {len(sampled_frames)}")
-    print(f"Кадры сохранены в: {output_dir}")
-    print(f"Отчет сохранен в: {output_dir / 'frame_sampling_report.csv'}")
+    if not cap.isOpened():
+        raise RuntimeError(f"Cannot open video: {video_path}")
+
+    frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+
+    if frame_count <= 0:
+        frame_indices = list(range(args.frames))
+    else:
+        frame_indices = np.linspace(
+            0,
+            max(0, frame_count - 1),
+            num=args.frames,
+            dtype=int,
+        ).tolist()
+
+    for i, frame_index in enumerate(frame_indices):
+        cap.set(cv2.CAP_PROP_POS_FRAMES, int(frame_index))
+        ok, raw = cap.read()
+
+        if not ok or raw is None:
+            continue
+
+        processed = preprocessor.process(raw)
+
+        collage = make_before_after_collage(raw, processed)
+
+        output_path = output_dir / f"frame_{frame_index:06d}_before_after.jpg"
+
+        cv2.imwrite(str(output_path), collage)
+
+        print(output_path)
+
+    cap.release()
 
 
 if __name__ == "__main__":
     main()
 
-
 '''
-запуск
-
 python tests/cv_module_video.py \
   --video data/input/labeled/25_2-10.mp4 \
-  --output data/output/frame_sampling \
-  --target-fps 2 \
-  --window-sec 1 \
-  --max-frames 100 \
-  --min-quality 0.25
+  --output data/output/video_preprocessing_debug \
+  --frames 12 \
+  --undistort \
+  --orientation auto
 '''

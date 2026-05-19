@@ -13,6 +13,7 @@ env/
 data/input/
 data/output/
 data/tmp/
+data/datasets/
 *.mp4
 *.avi
 *.mov

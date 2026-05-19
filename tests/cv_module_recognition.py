@@ -17,6 +17,7 @@ from cv_module.recognition.field_parser import (  # noqa: E402
     PriceTagFieldParser,
 )
 from cv_module.recognition.ocr_engine import OCREngine  # noqa: E402
+from cv_module.recognition.promo_price_parcer import PromoPriceParser  # noqa: E402
 
 
 def main() -> None:
@@ -102,6 +103,7 @@ def main() -> None:
     parser_engine = PriceTagFieldParser()
     barcode_reader = BarcodeReader(try_harder=True)
     ocr_engine = OCREngine()
+    promo_parser = PromoPriceParser()
     video_capture = cv2.VideoCapture(args.video) if args.video else None
     used_label_indexes: set[int] = set()
     output_rows: list[dict[str, str | int | float]] = []
@@ -138,6 +140,7 @@ def main() -> None:
                     parser_engine=parser_engine,
                     barcode_reader=barcode_reader,
                     ocr_engine=ocr_engine,
+                    promo_parser=promo_parser,
                     video_capture=video_capture,
                     crop_padding_ratio=args.crop_padding_ratio,
                     debug_crops_dir=debug_crops_dir,
@@ -236,6 +239,7 @@ def _recognize_without_labels(
     parser_engine: PriceTagFieldParser,
     barcode_reader: BarcodeReader,
     ocr_engine: OCREngine,
+    promo_parser: PromoPriceParser,
     video_capture,
     crop_padding_ratio: float,
     debug_crops_dir: Path | None,
@@ -267,11 +271,13 @@ def _recognize_without_labels(
         )
 
     barcode_reads = barcode_reader.read(image)
+    promo_result = promo_parser.parse(image)
     ocr_result = ocr_engine.recognize(image)
 
     fields = parser_engine.parse(
         ocr_text=ocr_result.raw_text,
         code_values=[read.value for read in barcode_reads],
+        promo_result=promo_result,
     )
 
     field_values = fields.to_dict()

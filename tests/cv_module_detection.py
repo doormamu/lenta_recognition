@@ -208,6 +208,19 @@ def main() -> None:
         help="Включить медленный поиск QR/штрихкодов внутри найденных кандидатов",
     )
 
+    parser.add_argument(
+        "--undistort",
+        action="store_true",
+        help="Исправлять широкоугольную дисторсию камеры",
+    )
+
+    parser.add_argument(
+        "--orientation",
+        default="none",
+        choices=["none", "auto", "rot90_ccw", "rot90_cw", "rot180"],
+        help="Поворот кадров перед detection",
+    )
+
     args = parser.parse_args()
 
     video_path = Path(args.video)
@@ -231,6 +244,8 @@ def main() -> None:
         window_sec=args.window_sec,
         max_frames=args.max_frames,
         min_quality_score=args.min_quality,
+        enable_undistort=args.undistort,
+        orientation=args.orientation,
     )
 
     print()
@@ -377,7 +392,9 @@ python tests/cv_module_detection.py \
   --window-sec 0.5 \
   --max-frames 80 \
   --min-quality 0.15 \
-  --max-candidates 80 \
-  --min-candidate-score 0.30 \
+  --max-candidates 20 \
+  --min-candidate-score 0.50 \
+  --undistort \
+  --orientation auto \
   --save-crops
 '''

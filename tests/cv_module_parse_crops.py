@@ -20,6 +20,7 @@ from cv_module.recognition.product_reference import (  # noqa: E402
     apply_reference_match,
     load_product_references,
 )
+from cv_module.recognition.promo_price_parcer import PromoPriceParser  # noqa: E402
 
 
 def main() -> None:
@@ -48,19 +49,30 @@ def main() -> None:
         help="Сколько распознанных строк сохранить",
     )
     parser.add_argument(
-        "--strict-signal",
+        "--max-crops",
+        type=int,
+        default=None,
+        help="Сколько crop-картинок максимум обработать; удобно для быстрых тестов",
+    )
+    parser.add_argument(
+        "--promo-only",
         action="store_true",
-        help="Сохранять только строки с распарсенными ценами/кодами, без слабого OCR-текста",
+        help="Запускать только promo price parser без общего OCR и barcode reader",
     )
     args = parser.parse_args()
 
     crop_rows = _read_csv(Path(args.crops_report))
+
+    if args.max_crops is not None:
+        crop_rows = crop_rows[:args.max_crops]
+
     output_path = Path(args.output)
     references = load_product_references(Path(args.reference_labels)) if args.reference_labels else []
 
     parser_engine = PriceTagFieldParser()
     barcode_reader = BarcodeReader(try_harder=True)
     ocr_engine = OCREngine()
+    promo_parser = PromoPriceParser()
     output_rows: list[dict[str, str | int | float]] = []
 
     for crop_row in crop_rows:
@@ -73,18 +85,18 @@ def main() -> None:
         if image is None or image.size == 0:
             continue
 
-        barcode_reads = barcode_reader.read(image)
-        ocr_result = ocr_engine.recognize(image)
+        promo_result = promo_parser.parse(image)
+        barcode_reads = [] if args.promo_only else barcode_reader.read(image)
+        ocr_text = "" if args.promo_only else ocr_engine.recognize(image).raw_text
         fields = parser_engine.parse(
-            ocr_text=ocr_result.raw_text,
+            ocr_text=ocr_text,
             code_values=[read.value for read in barcode_reads],
+            promo_result=promo_result,
         )
         reference_match = apply_reference_match(fields, references)
         field_values = fields.to_dict()
 
-        if not _has_signal(field_values) and (
-            args.strict_signal or not _has_weak_ocr_text(ocr_result.raw_text)
-        ):
+        if not _has_signal(field_values):
             continue
 
         output_row: dict[str, str | int | float] = {
@@ -95,7 +107,8 @@ def main() -> None:
             "source": crop_row.get("source", ""),
             "score": crop_row.get("score", ""),
             "reference_match": "yes" if reference_match is not None else "no",
-            "ocr_text": _compact_ocr_text(ocr_result.raw_text),
+            "promo_confidence": round(promo_result.confidence, 4),
+            "promo_orientation": promo_result.orientation,
         }
         output_row.update(_make_excel_friendly(field_values))
         output_rows.append(output_row)
@@ -113,7 +126,8 @@ def main() -> None:
                 "source",
                 "score",
                 "reference_match",
-                "ocr_text",
+                "promo_confidence",
+                "promo_orientation",
                 *OUTPUT_FIELDS,
             ],
             delimiter=";",
@@ -163,21 +177,6 @@ def _has_signal(field_values: dict[str, str]) -> bool:
     )
 
 
-def _has_weak_ocr_text(text: str) -> bool:
-    compact_text = " ".join(text.split())
-
-    if len(compact_text) < 5:
-        return False
-
-    if len([char for char in compact_text if char.isdigit()]) >= 2:
-        return True
-
-    if len([char for char in compact_text if "а" <= char.lower() <= "я" or char.lower() == "ё"]) >= 4:
-        return True
-
-    return False
-
-
 def _read_csv(path: Path) -> list[dict[str, str]]:
     with path.open("r", encoding="utf-8-sig", newline="") as file:
         return list(csv.DictReader(file, delimiter=";"))
@@ -190,9 +189,13 @@ def _make_excel_friendly(row: dict[str, str]) -> dict[str, str]:
     }
 
 
-def _compact_ocr_text(text: str) -> str:
-    return " | ".join(" ".join(line.split()) for line in text.splitlines() if line.strip())[:600]
-
-
 if __name__ == "__main__":
     main()
+
+'''
+/Library/Frameworks/Python.framework/Versions/3.13/bin/python3 tests/cv_module_parse_crops.py \
+  --crops-report data/output/recognition_debug/crops_25_2_10.csv \
+  --output data/output/recognition_debug/parsed_crops_25_2_10.csv \
+  --reference-labels data/output/labeled \
+  --max-rows 80
+'''

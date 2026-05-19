@@ -182,3 +182,14 @@ def _int_value(value: str) -> int:
 
 if __name__ == "__main__":
     main()
+
+
+'''
+/Library/Frameworks/Python.framework/Versions/3.13/bin/python3 tests/cv_module_collect_crops.py \
+  --detection-report data/output/detection_debug/detection_report.csv \
+  --video data/input/labeled/25_2-10.mp4 \
+  --output-dir data/output/recognition_debug/crops_25_2_10 \
+  --report data/output/recognition_debug/crops_25_2_10.csv \
+  --max-crops 200 \
+  --max-detections 1200
+'''

@@ -42,11 +42,6 @@ def main() -> None:
         action="store_true",
         help="Серыми рамками показать все detection-кандидаты на кадре",
     )
-    parser.add_argument(
-        "--draw-tails",
-        action="store_true",
-        help="Показать линии движения центров треков",
-    )
     args = parser.parse_args()
 
     video_path = Path(args.video)
@@ -137,13 +132,12 @@ def main() -> None:
                     label=f"T{track_id}",
                     thickness=3,
                 )
-                if args.draw_tails:
-                    _draw_tail(
-                        frame=frame,
-                        centers=track_centers.get(track_id, []),
-                        current_frame=frame_index,
-                        color=color,
-                    )
+                _draw_tail(
+                    frame=frame,
+                    centers=track_centers.get(track_id, []),
+                    current_frame=frame_index,
+                    color=color,
+                )
 
             cv2.putText(
                 frame,
@@ -236,3 +230,14 @@ def _track_color(track_id: int) -> tuple[int, int, int]:
 
 if __name__ == "__main__":
     main()
+
+'''
+/Library/Frameworks/Python.framework/Versions/3.13/bin/python3 tests/cv_module_tracking_video.py \
+  --video data/input/labeled/25_2-10.mp4 \
+  --tracks data/output/tracking_debug/tracks_25_2_10.csv \
+  --track-detections data/output/tracking_debug/track_detections.csv \
+  --detection-report data/output/detection_debug/detection_report.csv \
+  --output data/output/tracking_debug/tracking_25_2_10.mp4 \
+  --fps 6 \
+  --draw-all-detections
+'''

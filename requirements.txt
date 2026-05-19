@@ -5,3 +5,6 @@ pyzbar==0.1.9
 PyYAML==6.0.2
 tqdm==4.67.1
 zxing-cpp
+ultralytics
+paddleocr
+paddlepaddle
